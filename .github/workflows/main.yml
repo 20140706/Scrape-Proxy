@@ -69,14 +69,3 @@ jobs:
         git add available_proxies.txt BEST_SOCKS5.txt || echo "没有可提交的文件"
         git commit -m "🤖 自动更新代理列表 [skip ci]" || echo "没有变化可提交"
         git push || echo "推送失败或无需推送"
-        
-    - name: 📢 发送通知（可选）
-      if: always() && github.event_name != 'pull_request'
-      uses: 8398a7/action-slack@v4
-      with:
-        channel: '#notifications'
-        status: ${{ job.status }}
-        author_name: Proxy Tester
-        fields: repo,message,commit,author,action,eventName,ref,workflow,job,took
-      env:
-        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
