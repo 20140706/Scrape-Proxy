@@ -24,7 +24,7 @@ jobs:
         
     - name: 📦 安装依赖
       run: |
-        pip install requests
+        pip install requests[socks]
         
     - name: 🧪 运行代理测试
       timeout-minutes: 10
