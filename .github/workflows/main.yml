@@ -1,0 +1,83 @@
+name: SOCKS5 Proxy Tester
+
+on:
+  # 每天UTC时间0点和12点运行
+  schedule:
+    - cron: '0 0 * * *'
+    - cron: '0 12 * * *'
+  
+  # 允许手动触发
+  workflow_dispatch:
+  
+  # 代码推送时触发
+  push:
+    branches: [ main, master ]
+    paths:
+      - '**.py'
+      - 'requirements.txt'
+      - '.github/workflows/**'
+  
+  # 创建PR时触发
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-proxies:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 检出代码
+      uses: actions/checkout@v3
+      
+    - name: 🐍 设置Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+        
+    - name: 📦 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: 🧪 运行代理测试
+      timeout-minutes: 15
+      run: |
+        python proxy_tester.py
+        echo "=== 测试结果 ==="
+        if [ -f "available_proxies.txt" ]; then
+          echo "可用代理数: $(grep -c '^[0-9]' available_proxies.txt || echo 0)"
+          echo "最佳代理: $(cat BEST_SOCKS5.txt 2>/dev/null || echo '无')"
+        fi
+        
+    - name: 📊 上传测试结果
+      uses: actions/upload-artifact@v3
+      with:
+        name: proxy-results-${{ github.run_number }}
+        path: |
+          available_proxies.txt
+          BEST_SOCKS5.txt
+          proxy_results.json
+          proxy_report.html
+          proxy_test.log
+        retention-days: 7
+        
+    - name: 📤 提交更新（可选）
+      if: github.event_name != 'pull_request'
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add available_proxies.txt BEST_SOCKS5.txt || echo "没有可提交的文件"
+        git commit -m "🤖 自动更新代理列表 [skip ci]" || echo "没有变化可提交"
+        git push || echo "推送失败或无需推送"
+        
+    - name: 📢 发送通知（可选）
+      if: always() && github.event_name != 'pull_request'
+      uses: 8398a7/action-slack@v3
+      with:
+        channel: '#notifications'
+        status: ${{ job.status }}
+        author_name: Proxy Tester
+        fields: repo,message,commit,author,action,eventName,ref,workflow,job,took
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
