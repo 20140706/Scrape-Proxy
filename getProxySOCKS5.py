@@ -93,7 +93,7 @@ def fetch_proxies():
     logger.info(f"总共获取到 {len(proxy_list)} 个唯一代理")
     return proxy_list
 
-def test_single_proxy(proxy, timeout=8, real_ip=None):
+def test_single_proxy(proxy, timeout=15, real_ip=None):
     """仅使用 https://icanhazip.com 测试单个 SOCKS5 代理"""
     try:
         proxy_dict = {
