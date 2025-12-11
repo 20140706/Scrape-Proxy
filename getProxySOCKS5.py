@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-GitHub Actions SOCKS5代理测试工具 - 修复版
+GitHub Actions SOCKS5代理测试工具 - 简化版（无HTML报告）
 """
 
 import requests
@@ -9,187 +9,247 @@ import os
 import sys
 import time
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import logging
 
-# 设置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('proxy_test.log', encoding='utf-8')
-    ]
-)
-logger = logging.getLogger(__name__)
+# 配置日志
+def setup_logging():
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler('proxy_test.log', encoding='utf-8')
+        ]
+    )
+    return logging.getLogger(__name__)
 
-# 代理来源
+logger = setup_logging()
+
+# 代理来源列表
 PROXY_SOURCES = [
     "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt",
     "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies_anonymous/socks5.txt",
     "https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/socks5.txt",
-    "https://raw.githubusercontent.com/Zaeem20/FREE_PROXIES_LIST/master/socks5.txt",
+    "https://raw.githubusercontent.com/Zaeem20/FREE_PROXIES_LIST/master/socks5.txt"
 ]
 
 # 测试网站
 TEST_WEBSITES = [
     "https://icanhazip.com",
-    "https://api.ipify.org",
+    "https://api.ipify.org"
 ]
 
-class ProxyTester:
-    def __init__(self, max_workers=10, timeout=8):
-        self.max_workers = max_workers
-        self.timeout = timeout
-        self.session = requests.Session()
-        
-    def fetch_proxies(self):
-        """获取代理列表"""
-        all_proxies = []
-        for url in PROXY_SOURCES:
-            try:
-                response = self.session.get(url, timeout=10)
-                if response.status_code == 200:
-                    proxies = [line.strip() for line in response.text.split('\n') 
-                              if line.strip() and ':' in line and not line.startswith('#')]
-                    all_proxies.extend(proxies)
-                    logger.info(f"从 {url} 获取到 {len(proxies)} 个代理")
-            except Exception as e:
-                logger.warning(f"获取 {url} 失败: {e}")
-        
-        return list(set(all_proxies))
+# User-Agent列表
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+]
+
+def get_user_agent():
+    """获取随机User-Agent"""
+    return random.choice(USER_AGENTS)
+
+def fetch_proxies():
+    """从多个来源获取代理"""
+    all_proxies = set()
     
-    def test_proxy(self, proxy):
-        """测试单个代理"""
+    for url in PROXY_SOURCES:
         try:
-            proxy_url = f"socks5://{proxy}"
-            proxies = {'http': proxy_url, 'https': proxy_url}
+            logger.info(f"正在获取代理: {url}")
+            response = requests.get(url, timeout=10, headers={'User-Agent': get_user_agent()})
+            response.raise_for_status()
             
-            results = []
-            for website in TEST_WEBSITES:
+            proxies = response.text.strip().split('\n')
+            valid_proxies = [p.strip() for p in proxies if p.strip() and ':' in p and not p.startswith('#')]
+            
+            logger.info(f"从 {url} 获取到 {len(valid_proxies)} 个代理")
+            all_proxies.update(valid_proxies)
+            
+        except Exception as e:
+            logger.warning(f"获取 {url} 失败: {e}")
+    
+    proxy_list = list(all_proxies)
+    logger.info(f"总共获取到 {len(proxy_list)} 个唯一代理")
+    return proxy_list
+
+def test_single_proxy(proxy, timeout=8):
+    """测试单个代理"""
+    try:
+        proxy_dict = {
+            'http': f'socks5://{proxy}',
+            'https': f'socks5://{proxy}'
+        }
+        
+        results = []
+        
+        for website in TEST_WEBSITES:
+            try:
                 start_time = time.time()
-                response = self.session.get(website, proxies=proxies, timeout=self.timeout)
+                response = requests.get(
+                    website, 
+                    proxies=proxy_dict, 
+                    timeout=timeout,
+                    headers={'User-Agent': get_user_agent()}
+                )
                 latency = time.time() - start_time
                 
                 if response.status_code == 200:
                     results.append({
-                        'proxy': proxy,
                         'website': website,
                         'status_code': response.status_code,
-                        'ip': response.text.strip(),
-                        'latency': round(latency, 2),
-                        'success': True
+                        'response': response.text.strip(),
+                        'latency': round(latency, 2)
                     })
-            
-            return results if len(results) == len(TEST_WEBSITES) else None
-            
-        except Exception as e:
-            return None
+                else:
+                    logger.debug(f"代理 {proxy} 在 {website} 返回状态码 {response.status_code}")
+                    return None
+                    
+            except Exception as e:
+                logger.debug(f"代理 {proxy} 在 {website} 测试失败: {e}")
+                return None
+        
+        # 如果所有网站测试都通过
+        avg_latency = sum(r['latency'] for r in results) / len(results)
+        return {
+            'proxy': proxy,
+            'avg_latency': avg_latency,
+            'results': results,
+            'success': True
+        }
+        
+    except Exception as e:
+        logger.debug(f"代理 {proxy} 测试失败: {e}")
+        return None
+
+def test_proxies(proxy_list, max_proxies_to_test=30):
+    """测试代理列表"""
+    working_proxies = []
+    tested_count = 0
     
-    def test_proxies(self, proxies, max_tests=50):
-        """批量测试代理"""
-        working_proxies = []
-        results = []
+    # 打乱代理列表
+    random.shuffle(proxy_list)
+    
+    # 限制测试数量
+    proxies_to_test = proxy_list[:max_proxies_to_test]
+    logger.info(f"将测试 {len(proxies_to_test)} 个代理")
+    
+    for proxy in proxies_to_test:
+        tested_count += 1
         
-        test_proxies = proxies[:max_tests]
-        logger.info(f"开始测试 {len(test_proxies)} 个代理")
+        if tested_count % 5 == 0:
+            logger.info(f"已测试 {tested_count}/{len(proxies_to_test)} 个代理，找到 {len(working_proxies)} 个可用")
         
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            future_to_proxy = {executor.submit(self.test_proxy, proxy): proxy 
-                              for proxy in test_proxies}
+        result = test_single_proxy(proxy)
+        if result:
+            working_proxies.append(result)
+            logger.info(f"✓ 找到可用代理: {proxy} (延迟: {result['avg_latency']}秒)")
             
-            for future in as_completed(future_to_proxy):
-                proxy = future_to_proxy[future]
-                try:
-                    proxy_results = future.result()
-                    if proxy_results:
-                        working_proxies.append(proxy)
-                        results.extend(proxy_results)
-                        logger.info(f"✓ {proxy} 可用")
-                except Exception:
-                    pass
-        
-        return results, working_proxies
+            # 如果已经找到足够多的代理，可以提前停止
+            if len(working_proxies) >= 5:
+                logger.info(f"已找到 {len(working_proxies)} 个可用代理，提前停止测试")
+                break
     
-    def save_results(self, results, working_proxies, total_count):
-        """保存结果"""
-        # 保存详细结果
-        with open('proxy_results.json', 'w', encoding='utf-8') as f:
-            json.dump({
-                'test_time': datetime.now().isoformat(),
-                'total_proxies': total_count,
-                'working_proxies': len(working_proxies),
-                'results': results
-            }, f, indent=2, ensure_ascii=False)
-        
-        # 保存可用代理列表
-        with open('available_proxies.txt', 'w', encoding='utf-8') as f:
-            f.write(f"# 生成时间: {datetime.now()}\n")
-            f.write(f"# 总代理数: {total_count}\n")
-            f.write(f"# 可用代理数: {len(working_proxies)}\n\n")
-            f.write('\n'.join(working_proxies))
-        
-        # 保存最佳代理
-        if results:
-            best = min(results, key=lambda x: x['latency'])
-            with open('BEST_SOCKS5.txt', 'w') as f:
-                f.write(best['proxy'])
+    return working_proxies
+
+def save_results(working_proxies, total_proxies_fetched):
+    """保存结果到文件"""
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
-    def run(self):
-        """主运行函数"""
-        logger.info("🚀 开始代理测试")
+    # 1. 保存JSON格式的详细结果
+    json_data = {
+        'timestamp': timestamp,
+        'total_proxies_fetched': total_proxies_fetched,
+        'working_proxies_count': len(working_proxies),
+        'working_proxies': working_proxies
+    }
+    
+    with open('proxy_results.json', 'w', encoding='utf-8') as f:
+        json.dump(json_data, f, indent=2, ensure_ascii=False)
+    
+    # 2. 保存纯文本代理列表 - 即使没有可用代理也创建文件
+    with open('available_proxies.txt', 'w', encoding='utf-8') as f:
+        f.write(f"# 生成时间: {timestamp}\n")
+        f.write(f"# 总代理数: {total_proxies_fetched}\n")
+        f.write(f"# 可用代理数: {len(working_proxies)}\n")
+        f.write("# 格式: IP:端口\n\n")
         
-        # 获取代理
-        proxies = self.fetch_proxies()
-        if not proxies:
-            logger.error("❌ 未获取到代理")
-            return
-        
-        logger.info(f"📊 获取到 {len(proxies)} 个代理")
-        
-        # 测试代理
-        results, working_proxies = self.test_proxies(proxies)
-        
-        # 保存结果
         if working_proxies:
-            self.save_results(results, working_proxies, len(proxies))
-            logger.info(f"✅ 测试完成，找到 {len(working_proxies)} 个可用代理")
-            
-            # 生成简单的HTML报告
-            self.generate_html_report(results, len(proxies))
+            for proxy_info in working_proxies:
+                f.write(f"{proxy_info['proxy']}\n")
         else:
-            logger.warning("⚠️ 未找到可用代理")
+            f.write("# 本次测试未找到可用代理\n")
     
-    def generate_html_report(self, results, total_count):
-        """生成HTML报告"""
-        working_count = len(set(r['proxy'] for r in results))
-        
-        html = f"""
-        <html>
-        <head><title>代理测试报告</title></head>
-        <body>
-            <h1>代理测试报告</h1>
-            <p>测试时间: {datetime.now()}</p>
-            <p>总代理数: {total_count}</p>
-            <p>可用代理数: {working_count}</p>
-            <h2>可用代理列表</h2>
-            <ul>
-        """
-        
-        for proxy in set(r['proxy'] for r in results):
-            proxy_results = [r for r in results if r['proxy'] == proxy]
-            avg_latency = sum(r['latency'] for r in proxy_results) / len(proxy_results)
-            html += f'<li>{proxy} (平均延迟: {avg_latency:.2f}s)</li>'
-        
-        html += "</ul></body></html>"
-        
-        with open('proxy_report.html', 'w', encoding='utf-8') as f:
-            f.write(html)
+    # 3. 保存最佳代理 - 即使没有可用代理也创建文件
+    with open('BEST_SOCKS5.txt', 'w', encoding='utf-8') as f:
+        if working_proxies:
+            best_proxy = min(working_proxies, key=lambda x: x['avg_latency'])
+            f.write(best_proxy['proxy'])
+            logger.info(f"最佳代理: {best_proxy['proxy']} (延迟: {best_proxy['avg_latency']}秒)")
+        else:
+            f.write("# 本次测试未找到可用代理\n")
+    
+    logger.info(f"结果已保存到文件")
 
 def main():
-    tester = ProxyTester()
-    tester.run()
+    """主函数"""
+    logger.info("🚀 开始SOCKS5代理测试")
+    start_time = time.time()
+    
+    try:
+        # 1. 获取代理列表
+        logger.info("📡 正在从多个来源获取代理...")
+        all_proxies = fetch_proxies()
+        
+        if not all_proxies:
+            logger.error("❌ 未能获取到任何代理")
+            # 创建空的结果文件
+            save_results([], 0)
+            return 0
+        
+        # 2. 测试代理
+        logger.info("🧪 开始测试代理...")
+        working_proxies = test_proxies(all_proxies)
+        
+        # 3. 保存结果
+        logger.info("💾 保存测试结果...")
+        save_results(working_proxies, len(all_proxies))
+        
+        # 4. 显示统计信息
+        end_time = time.time()
+        total_time = end_time - start_time
+        
+        print("\n" + "="*60)
+        print("🎯 SOCKS5代理测试完成")
+        print("="*60)
+        print(f"总代理数: {len(all_proxies)}")
+        print(f"可用代理数: {len(working_proxies)}")
+        print(f"测试耗时: {total_time:.2f}秒")
+        
+        if working_proxies:
+            best_proxy = min(working_proxies, key=lambda x: x['avg_latency'])
+            print(f"最佳代理: {best_proxy['proxy']} (延迟: {best_proxy['avg_latency']:.2f}秒)")
+        else:
+            print("❌ 未找到可用代理")
+        
+        print("="*60)
+        print("📁 生成的文件:")
+        print("  - available_proxies.txt (可用代理列表)")
+        print("  - BEST_SOCKS5.txt (最佳代理)")
+        print("  - proxy_results.json (完整结果)")
+        print("  - proxy_test.log (日志文件)")
+        print("="*60)
+        
+        return 0
+        
+    except KeyboardInterrupt:
+        logger.info("测试被用户中断")
+        return 130
+    except Exception as e:
+        logger.error(f"测试过程中发生错误: {e}")
+        # 即使出错也创建结果文件
+        save_results([], 0)
+        return 1
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
