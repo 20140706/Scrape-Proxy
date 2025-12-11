@@ -43,7 +43,7 @@ jobs:
     - name: 🧪 运行代理测试
       timeout-minutes: 15
       run: |
-        python proxy_tester.py
+        python getProxySOCKS5.py
         echo "=== 测试结果 ==="
         if [ -f "available_proxies.txt" ]; then
           echo "可用代理数: $(grep -c '^[0-9]' available_proxies.txt || echo 0)"
