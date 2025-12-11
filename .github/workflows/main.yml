@@ -27,7 +27,7 @@ jobs:
         pip install requests[socks]
         
     - name: 🧪 运行代理测试
-      timeout-minutes: 10
+      timeout-minutes: 60
       run: python getProxySOCKS5.py
         
     - name: 📊 上传测试结果
