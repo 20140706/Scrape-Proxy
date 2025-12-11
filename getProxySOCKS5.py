@@ -204,7 +204,7 @@ def test_single_proxy(proxy_str, timeout=8, real_ip=None):
     return None
 
 
-def test_proxies(proxy_list, real_ip=None, max_workers=200):
+def test_proxies(proxy_list, real_ip=None, max_workers=500):
     """使用多线程测试所有代理"""
     if not proxy_list:
         return []
@@ -354,7 +354,7 @@ def main():
 
         # 2. 多线程测试所有代理
         logger.info("🧪 开始多线程测试所有代理...")
-        working_proxies = test_proxies(all_proxies, real_ip=real_ip, max_workers=200)
+        working_proxies = test_proxies(all_proxies, real_ip=real_ip, max_workers=500)
 
         # 3. 保存结果
         logger.info("💾 保存测试结果...")
