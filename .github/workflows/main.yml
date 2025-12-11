@@ -2,8 +2,7 @@ name: SOCKS5 Proxy Tester
 
 on:
   schedule:
-    - cron: '0 0 * * *'
-    - cron: '0 12 * * *'
+    - cron: '0 */4 * * *'
   workflow_dispatch:
   push:
     branches: [ main, master ]
