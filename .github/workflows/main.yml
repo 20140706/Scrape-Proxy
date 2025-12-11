@@ -1,23 +1,12 @@
 name: SOCKS5 Proxy Tester
 
 on:
-  # 每天UTC时间0点和12点运行
   schedule:
     - cron: '0 0 * * *'
     - cron: '0 12 * * *'
-  
-  # 允许手动触发
   workflow_dispatch:
-  
-  # 代码推送时触发
   push:
     branches: [ main, master ]
-    paths:
-      - '**.py'
-      - 'requirements.txt'
-      - '.github/workflows/**'
-  
-  # 创建PR时触发
   pull_request:
     branches: [ main, master ]
 
@@ -33,39 +22,49 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
-        cache: 'pip'
         
     - name: 📦 安装依赖
       run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        pip install requests
         
     - name: 🧪 运行代理测试
-      timeout-minutes: 15
-      run: |
-        python getProxySOCKS5.py
-        echo "=== 测试结果 ==="
-        if [ -f "available_proxies.txt" ]; then
-          echo "可用代理数: $(grep -c '^[0-9]' available_proxies.txt || echo 0)"
-          echo "最佳代理: $(cat BEST_SOCKS5.txt 2>/dev/null || echo '无')"
-        fi
+      timeout-minutes: 10
+      run: python getProxySOCKS5.py
         
     - name: 📊 上传测试结果
       uses: actions/upload-artifact@v4
       with:
-        name: proxy-results-${{ github.run_number }}
+        name: proxy-results
         path: |
           available_proxies.txt
           BEST_SOCKS5.txt
           proxy_results.json
-          proxy_report.html
           proxy_test.log
         
-    - name: 📤 提交更新（可选）
+    - name: 📤 提交更新
       if: github.event_name != 'pull_request'
       run: |
+        # 确保文件存在
+        touch available_proxies.txt
+        touch BEST_SOCKS5.txt
+        
+        # 设置Git配置
         git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "github-actions[bot]"
-        git add available_proxies.txt BEST_SOCKS5.txt || echo "没有可提交的文件"
-        git commit -m "🤖 自动更新代理列表 [skip ci]" || echo "没有变化可提交"
-        git push || echo "推送失败或无需推送"
+        
+        # 添加文件
+        git add available_proxies.txt BEST_SOCKS5.txt
+        
+        # 检查是否有更改需要提交
+        if git diff-index --quiet HEAD --; then
+          echo "没有变化可提交"
+        else
+          git commit -m "🤖 自动更新代理列表 [skip ci]"
+          git push
+        fi
+        
+    - name: 📋 显示测试结果
+      run: |
+        echo "=== 测试结果 ==="
+        echo "可用代理数: $(grep -c '^[0-9]' available_proxies.txt 2>/dev/null || echo 0)"
+        echo "最佳代理: $(grep -v '^#' BEST_SOCKS5.txt 2>/dev/null || echo '无')"
