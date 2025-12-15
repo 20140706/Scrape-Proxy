@@ -77,6 +77,13 @@ PROXY_SOURCES = [
     "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt",
     "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies_anonymous/socks5.txt",
     "https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/socks5.txt",
+    "https://raw.githubusercontent.com/hookzof/socks5_list/refs/heads/master/proxy.txt",
+    "https://raw.githubusercontent.com/ClearProxy/checked-proxy-list/main/custom/discord/socks5.txt",
+    "https://raw.githubusercontent.com/databay-labs/free-proxy-list/refs/heads/master/socks5.txt",
+    "https://raw.githubusercontent.com/s0mecode/socks5-proxies/refs/heads/main/socks5_1000ms.txt",
+    "https://raw.githubusercontent.com/hw630590/free-proxy-list/refs/heads/main/proxies/socks5/socks5.txt",
+    "https://raw.githubusercontent.com/dxs1256/Deadpool/refs/heads/master/All.txt",
+    "https://raw.githubusercontent.com/vmheaven/VMHeaven-Free-Proxy-Updated/refs/heads/main/socks5.txt",
     "https://raw.githubusercontent.com/Zaeem20/FREE_PROXIES_LIST/master/socks5.txt"
 ]
 
