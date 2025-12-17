@@ -74,6 +74,7 @@ def is_valid_ipv4(ip_str):
 
 # 代理来源列表
 PROXY_SOURCES = [
+    "https://proxy.scdn.io/text.php",
     "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/socks5.txt",
     "https://raw.githubusercontent.com/ErcinDedeoglu/proxies/main/proxies/socks5.txt",
     "https://raw.githubusercontent.com/hookzof/socks5_list/refs/heads/master/proxy.txt",
